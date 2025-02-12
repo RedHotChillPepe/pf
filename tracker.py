@@ -1,5 +1,5 @@
 import math
-
+import numpy as np
 
 class Tracker:
     def __init__(self):
@@ -66,3 +66,84 @@ class Tracker:
         Проверить, было ли яйцо когда-либо дефектным.
         """
         return self.defects.get(object_id, False)
+
+    class Track:
+        def __init__(self, track_id, bbox):
+            self.id = track_id
+            self.bbox = bbox  # Формат: (x1, y1, x2, y2)
+            self.missed = 0  # Количество последовательных кадров без обнаружения
+
+    class EggTracker:
+        def __init__(self, max_missed=5, distance_threshold=50):
+            self.tracks = []  # Список активных треков
+            self.next_id = 0  # Следующий id для нового трека
+            self.max_missed = max_missed  # Максимальное число кадров без обнаружения, после которого трек удаляется
+            self.distance_threshold = distance_threshold  # Порог для сопоставления обнаружений и треков
+
+        def update(self, detections):
+            """
+            detections: список обнаруженных bounding boxes для текущего кадра [(x, y, w, h), ...]
+            Возвращает список кортежей (id трека, bbox)
+            """
+            # Список для сопоставленных треков
+            updated_tracks = []
+            # Копия активных треков, чтобы отметить, с кем из них не совпали обнаружения
+            unmatched_tracks = self.tracks.copy()
+
+            # Для каждого обнаружения ищем ближайший трек
+            for det in detections:
+                best_track = None
+                best_distance = float('inf')
+                for track in unmatched_tracks:
+                    dist = self._compute_distance(det, track.bbox)
+                    if dist < best_distance:
+                        best_distance = dist
+                        best_track = track
+
+                if best_track is not None and best_distance < self.distance_threshold:
+                    # Если подходящий трек найден – обновляем его данные
+                    best_track.bbox = det
+                    best_track.missed = 0
+                    updated_tracks.append(best_track)
+                    unmatched_tracks.remove(best_track)
+                else:
+                    # Если не найдено подходящего трека – создаём новый
+                    new_track = Track(self.next_id, det)
+                    self.next_id += 1
+                    updated_tracks.append(new_track)
+
+            # Для треков, которые не получили сопоставления, увеличиваем счётчик пропусков
+            for track in unmatched_tracks:
+                track.missed += 1
+                if track.missed <= self.max_missed:
+                    updated_tracks.append(track)
+            # Обновляем список активных треков
+            self.tracks = [t for t in updated_tracks if t.missed <= self.max_missed]
+            return [(track.id, track.bbox) for track in self.tracks]
+
+        @staticmethod
+        def _compute_distance(bbox1, bbox2):
+            """
+            Вычисляет евклидову дистанцию между центрами двух bounding boxes.
+            bbox: (x, y, x, y)
+            """
+            x1, y1, x2, y2 = bbox1
+            x3, y3, x4, y4 = bbox2
+            center1 = (x1 + x2 / 2, y1 + y2 / 2)
+            center2 = (x3 + x4 / 2, y3 + y4 / 2)
+            return np.sqrt((center1[0] - center2[0]) ** 2 + (center1[1] - center2[1]) ** 2)
+
+    # Пример использования:
+    if __name__ == '__main__':
+        tracker = EggTracker(max_missed=5, distance_threshold=50)
+        # Симуляция кадров с обнаружениями яиц (bounding boxes в формате (x1, y1, x2, y2))
+        frames = [
+            [(100, 100, 50, 50), (200, 200, 50, 50)],  # Кадр 1: два яйца
+            [(105, 105, 50, 50)],  # Кадр 2: одно яйцо не обнаружено
+            [(110, 110, 50, 50), (205, 205, 50, 50)]  # Кадр 3: яйцо появляется снова
+        ]
+        for i, detections in enumerate(frames):
+            tracks = tracker.update(detections)
+            print(f"Кадр {i + 1}:")
+            for tid, bbox in tracks:
+                print(f"  Трек {tid}: {bbox}")
