@@ -1,0 +1,11 @@
+# created by virtualenv automatically
+/Frames
+/Annotated Frames
+/Lib
+/Scripts
+/share
+/stream
+/wheels
+FPS saver 2.py
+*.log
+*.txt

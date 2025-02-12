@@ -1,0 +1,4 @@
+# игнорировать директории .git и .cache
+.git
+.cache
+__pycache__/
