@@ -19,6 +19,8 @@ from dotenv import load_dotenv
 import globals
 import json
 
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+
 TORCH_VERSION = ".".join(torch.__version__.split(".")[:2])
 CUDA_VERSION = torch.__version__.split("+")[-1]
 print("torch: ", TORCH_VERSION, "; cuda: ", CUDA_VERSION)
@@ -28,6 +30,9 @@ load_dotenv()
 
 model = YOLO(os.getenv('MODEL'))
 # seg_model = YOLO(os.getenv('MODEL_SEGMENT'))
+
+max_missed = int(os.getenv('MAX_MISSED'))
+distance_threshold = int(os.getenv('DISTANCE_THRESHOLD'))
 
 def RGB(event, x, y, flags, param):
     if event == cv2.EVENT_MOUSEMOVE:
@@ -154,7 +159,8 @@ zone_center = np.mean(polygon, axis=0)
 
 def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
     print("Запуск камеры сверху...")
-    cap = cv2.VideoCapture(rtsp_url)
+    # cap = cv2.VideoCapture(rtsp_url)
+    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
     if not cap.isOpened():
         print("Ошибка: Не удалось открыть видео.")
         return
@@ -177,7 +183,7 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
         np.array(zone6, dtype=np.int32),
     ]
 
-    tracker = Tracker()
+    tracker = Tracker(max_missed=max_missed, distance_threshold=distance_threshold)
     counting = set()
     counting_all = set()
 
@@ -471,9 +477,3 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
     process.stdin.close()
     process.wait()
     cap.release()
-    # print(f"Кадры сохранены в папку: {SAVE_FOLDER}")
-    # print(f"Всего обнаружено яиц: {len(counting_all)}")
-    # print(f"Список id яиц: {counting_all}")
-
-
-# topcamera(VIDEO_PATH_ABOVE, SAVE_FOLDER)

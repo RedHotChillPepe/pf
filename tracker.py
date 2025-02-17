@@ -1,149 +1,128 @@
 import math
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 class Tracker:
-    def __init__(self):
-        # Store the center positions of the objects
+    def __init__(self, max_missed, distance_threshold):
+        # Словарь для хранения центров объектов: ключ — id, значение — (cx, cy)
         self.center_points = {}
-        # Keep the count of the IDs
-        # each time a new object id detected, the count will increase by one
+        # Счетчик для присвоения уникальных id новым объектам
         self.id_count = 0
 
-        # key: object_id, value: bool (True/False)
+        # Словарь для хранения информации о том, был ли объект помечен как дефектный
         self.defects = {}
 
+        # Словарь для хранения количества кадров подряд, в течение которых объект не обнаруживался
+        self.missed = {}
+
+        # Пороговое значение смещения между центрами в пикселях
+        self.distance_threshold = distance_threshold
+        # Максимальное число кадров, на протяжении которых объект может не обнаруживаться,
+        # но при этом оставаться в трекере
+        self.max_missed = max_missed
 
     def update(self, objects_rect):
-        # Objects boxes and ids
-        objects_bbs_ids = []
+        """
+        Обновляет трек объектов по текущему списку bounding box-ов.
+        Используется оптимальное сопоставление (алгоритм Венгр) между
+        текущими треками и новыми детекциями. Таким образом, одно обнаружение
+        сопоставляется только с одним треком, что исключает «перепрыгивание» id.
 
-        # Get center point of new object
+        :param objects_rect: список прямоугольников обнаруженных объектов [x1, y1, x2, y2]
+        :return: список объектов с их bounding box и id: [x1, y1, x2, y2, id]
+        """
+        objects_bbs_ids = []
+        detection_centers = []
+        # Сохраним также прямоугольники, чтобы потом использовать их по индексу
         for rect in objects_rect:
             x1, y1, x2, y2 = rect
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
+            detection_centers.append((cx, cy))
 
-            # Find out if that object was detected already
-            same_object_detected = False
-            for id, pt in self.center_points.items():
-                dist = math.hypot(cx - pt[0], cy - pt[1])
+        track_ids = list(self.center_points.keys())
+        track_centers = [self.center_points[tid] for tid in track_ids]
 
-                if dist < 35:
-                    self.center_points[id] = (cx, cy)
-#                    print(self.center_points)
-                    objects_bbs_ids.append([x1, y1, x2, y2, id])
-                    same_object_detected = True
-                    break
+        # Если есть и треки, и новые детекции, проводим оптимальное сопоставление
+        if len(track_centers) > 0 and len(detection_centers) > 0:
+            # Вычисляем матрицу расстояний (cost matrix)
+            cost_matrix = np.zeros((len(track_centers), len(detection_centers)), dtype=np.float32)
+            for i, tc in enumerate(track_centers):
+                for j, dc in enumerate(detection_centers):
+                    cost_matrix[i, j] = math.hypot(tc[0] - dc[0], tc[1] - dc[1])
 
-            # New object is detected we assign the ID to that object
-            if same_object_detected is False:
+            # Применяем алгоритм Венгр для оптимального сопоставления
+            rows, cols = linear_sum_assignment(cost_matrix)
+
+            # Множества для учёта присвоенных треков и детекций
+            assigned_tracks = set()
+            assigned_detections = set()
+
+            # Пройдем по полученным парам (индекс трека, индекс детекции)
+            for row, col in zip(rows, cols):
+                if cost_matrix[row, col] < self.distance_threshold:
+                    track_id = track_ids[row]
+                    # Обновляем позицию трека – берем центр детекции
+                    self.center_points[track_id] = detection_centers[col]
+                    objects_bbs_ids.append(
+                        [objects_rect[col][0], objects_rect[col][1], objects_rect[col][2], objects_rect[col][3],
+                         track_id]
+                    )
+                    assigned_tracks.add(track_id)
+                    assigned_detections.add(col)
+
+            # Для треков, которым не нашлась детекция, увеличиваем счетчик пропущенных кадров
+            for tid in track_ids:
+                if tid not in assigned_tracks:
+                    self.missed[tid] = self.missed.get(tid, 0) + 1
+                else:
+                    self.missed[tid] = 0
+
+            # Детекции, которым не удалось сопоставиться с существующим треком – считаем новыми объектами
+            for j, rect in enumerate(objects_rect):
+                if j not in assigned_detections:
+                    x1, y1, x2, y2 = rect
+                    cx = (x1 + x2) // 2
+                    cy = (y1 + y2) // 2
+                    self.center_points[self.id_count] = (cx, cy)
+                    self.missed[self.id_count] = 0
+                    self.defects[self.id_count] = False
+                    objects_bbs_ids.append([x1, y1, x2, y2, self.id_count])
+                    self.id_count += 1
+
+        else:
+            # Если нет существующих треков – добавляем все детекции как новые объекты
+            for rect in objects_rect:
+                x1, y1, x2, y2 = rect
+                cx = (x1 + x2) // 2
+                cy = (y1 + y2) // 2
                 self.center_points[self.id_count] = (cx, cy)
-                objects_bbs_ids.append([x1, y1, x2, y2, self.id_count])
-                # Tracking
+                self.missed[self.id_count] = 0
                 self.defects[self.id_count] = False
+                objects_bbs_ids.append([x1, y1, x2, y2, self.id_count])
                 self.id_count += 1
 
-        # Clean the dictionary by center points to remove IDS not used anymore
-        new_center_points = {}
-        for obj_bb_id in objects_bbs_ids:
-            _, _, _, _, object_id = obj_bb_id
-            center = self.center_points[object_id]
-            new_center_points[object_id] = center
+        # Удаляем треки, которые отсутствуют более max_missed кадров
+        remove_ids = [tid for tid, missed in self.missed.items() if missed > self.max_missed]
+        for tid in remove_ids:
+            if tid in self.center_points:
+                del self.center_points[tid]
+            if tid in self.missed:
+                del self.missed[tid]
+            if tid in self.defects:
+                del self.defects[tid]
 
-        # Update dictionary with IDs not used removed
-        self.center_points = new_center_points.copy()
         return objects_bbs_ids
 
     def mark_defect(self, object_id):
         """
-        Пометить яйцо как дефектное (True).
+        Помечает яйцо как дефектное (True)
         """
         if object_id in self.defects:
             self.defects[object_id] = True
 
     def is_defect(self, object_id):
         """
-        Проверить, было ли яйцо когда-либо дефектным.
+        Проверяет, был ли объект когда-либо помечен как дефектный
         """
         return self.defects.get(object_id, False)
-
-    class Track:
-        def __init__(self, track_id, bbox):
-            self.id = track_id
-            self.bbox = bbox  # Формат: (x1, y1, x2, y2)
-            self.missed = 0  # Количество последовательных кадров без обнаружения
-
-    class EggTracker:
-        def __init__(self, max_missed=5, distance_threshold=50):
-            self.tracks = []  # Список активных треков
-            self.next_id = 0  # Следующий id для нового трека
-            self.max_missed = max_missed  # Максимальное число кадров без обнаружения, после которого трек удаляется
-            self.distance_threshold = distance_threshold  # Порог для сопоставления обнаружений и треков
-
-        def update(self, detections):
-            """
-            detections: список обнаруженных bounding boxes для текущего кадра [(x, y, w, h), ...]
-            Возвращает список кортежей (id трека, bbox)
-            """
-            # Список для сопоставленных треков
-            updated_tracks = []
-            # Копия активных треков, чтобы отметить, с кем из них не совпали обнаружения
-            unmatched_tracks = self.tracks.copy()
-
-            # Для каждого обнаружения ищем ближайший трек
-            for det in detections:
-                best_track = None
-                best_distance = float('inf')
-                for track in unmatched_tracks:
-                    dist = self._compute_distance(det, track.bbox)
-                    if dist < best_distance:
-                        best_distance = dist
-                        best_track = track
-
-                if best_track is not None and best_distance < self.distance_threshold:
-                    # Если подходящий трек найден – обновляем его данные
-                    best_track.bbox = det
-                    best_track.missed = 0
-                    updated_tracks.append(best_track)
-                    unmatched_tracks.remove(best_track)
-                else:
-                    # Если не найдено подходящего трека – создаём новый
-                    new_track = Track(self.next_id, det)
-                    self.next_id += 1
-                    updated_tracks.append(new_track)
-
-            # Для треков, которые не получили сопоставления, увеличиваем счётчик пропусков
-            for track in unmatched_tracks:
-                track.missed += 1
-                if track.missed <= self.max_missed:
-                    updated_tracks.append(track)
-            # Обновляем список активных треков
-            self.tracks = [t for t in updated_tracks if t.missed <= self.max_missed]
-            return [(track.id, track.bbox) for track in self.tracks]
-
-        @staticmethod
-        def _compute_distance(bbox1, bbox2):
-            """
-            Вычисляет евклидову дистанцию между центрами двух bounding boxes.
-            bbox: (x, y, x, y)
-            """
-            x1, y1, x2, y2 = bbox1
-            x3, y3, x4, y4 = bbox2
-            center1 = (x1 + x2 / 2, y1 + y2 / 2)
-            center2 = (x3 + x4 / 2, y3 + y4 / 2)
-            return np.sqrt((center1[0] - center2[0]) ** 2 + (center1[1] - center2[1]) ** 2)
-
-    # Пример использования:
-    if __name__ == '__main__':
-        tracker = EggTracker(max_missed=5, distance_threshold=50)
-        # Симуляция кадров с обнаружениями яиц (bounding boxes в формате (x1, y1, x2, y2))
-        frames = [
-            [(100, 100, 50, 50), (200, 200, 50, 50)],  # Кадр 1: два яйца
-            [(105, 105, 50, 50)],  # Кадр 2: одно яйцо не обнаружено
-            [(110, 110, 50, 50), (205, 205, 50, 50)]  # Кадр 3: яйцо появляется снова
-        ]
-        for i, detections in enumerate(frames):
-            tracks = tracker.update(detections)
-            print(f"Кадр {i + 1}:")
-            for tid, bbox in tracks:
-                print(f"  Трек {tid}: {bbox}")
