@@ -57,11 +57,19 @@ class CameraRequest(BaseModel):
 # Глобальная переменная для отслеживания потоков
 threads = []
 
+# try:
+#     API_KEY = CameraRequest.api_key
+#     print(API_KEY)
+# except AttributeError:
+#     print("API ключ не может быть пустым")
+#     API_KEY = "dfbsdkghosdhgf"
+
 @app.post("/start_video", status_code=201)
 def start_video(request: CameraRequest):
     folder_path = './stream'
     extensions_to_delete = ['.ts', '.m3u8']
-    delete_files_with_extensions(folder_path, extensions_to_delete)
+    exclude_files = ['master.m3u8']
+    delete_files_with_extensions(folder_path, extensions_to_delete, exclude_files)
     print("Полученный АПИ ключ для входа:", request.api_key)
     print("Полученный URL основной камеры:", request.rtsp_url)
 
@@ -80,7 +88,8 @@ def start_video(request: CameraRequest):
 def start_analysis(request: CameraRequest):
     folder_path = './stream'
     extensions_to_delete = ['.ts', '.m3u8']
-    delete_files_with_extensions(folder_path, extensions_to_delete)
+    exclude_files = ['master.m3u8']
+    delete_files_with_extensions(folder_path, extensions_to_delete, exclude_files)
     print("Полученный АПИ ключ для входа:", request.api_key)
     print("Полученный URL основной камеры:", request.rtsp_url)
     global threads

@@ -36,7 +36,6 @@ model = YOLO(os.getenv('MODEL'))
 
 max_missed = int(os.getenv('MAX_MISSED'))
 distance_threshold = int(os.getenv('DISTANCE_THRESHOLD'))
-logs_path = os.getenv('LOGS_FOLDER')
 
 def RGB(event, x, y, flags, param):
     if event == cv2.EVENT_MOUSEMOVE:
@@ -48,70 +47,121 @@ print(f"api_url: {api_url}")
 
 start_time = time.time()
 
+# polygon = np.array([
+#             [178, 677],
+#             [305, 677],
+#             [305, 1850],
+#             [178, 1850]
+#         ])
+
 polygon = np.array([
-            [1000, 7],
-            [1131, 7],
-            [1131, 1519],
-            [1000, 1519]
+            [850, 484],
+            [1000, 484],
+            [1000, 2080],
+            [850, 2080]
         ])
 
-polygon1 = np.array([
-            [360, 153],
-            [518, 153],
-            [518, 1519],
-            [360, 1519]
-        ])
+# zone1 = np.array([
+#             [16, 533],
+#             [16, 389],
+#             [412, 231],
+#             [925, 115],
+#             [1519, 127],
+#             [1519, 283],
+#             [925, 305],
+#             [412, 404]
+#         ])
+#
+# zone2 = np.array([
+#             [15, 677],
+#             [15, 537],
+#             [412, 411],
+#             [925, 310],
+#             [1519, 290],
+#             [1519, 488],
+#             [925, 500],
+#             [412, 576]
+#         ])
+#
+# zone3 = np.array([
+#             [15, 841],
+#             [15, 683],
+#             [412, 582],
+#             [925, 508],
+#             [1519, 504],
+#             [1519, 735],
+#             [925, 732],
+#             [412, 780]
+#         ])
+#
+# zone4 = np.array([
+#             [15, 1020],
+#             [15, 852],
+#             [412, 786],
+#             [925, 744],
+#             [1519, 746],
+#             [1519, 1006],
+#             [683, 988]
+#         ])
+#
+# zone5 = np.array([
+#             [15, 1195],
+#             [15, 1027],
+#             [734, 977],
+#             [1519, 1025],
+#             [1519, 1285]
+#         ])
+#
+# zone6 = np.array([
+#             [15, 1373],
+#             [15, 1205],
+#             [1519, 1300],
+#             [1519, 1561]
+#         ])
 
 zone1 = np.array([
-            [8, 599],
-            [8, 403],
-            [635, 124],
-            [1268, 1],
-            [1340, 189],
-            [638, 359]
+            [16, 916],
+            [16, 753],
+            [646, 587],
+            [1519, 482],
+            [1519, 698],
+            [646, 780]
         ])
 
 zone2 = np.array([
-            [8, 761],
-            [8, 599],
-            [771, 317],
-            [1737, 128],
-            [1789, 369],
-            [830, 540]
+            [15, 1053],
+            [15, 916],
+            [646, 780],
+            [1519, 705],
+            [1519, 935]
         ])
 
 zone3 = np.array([
-            [8, 925],
-            [8, 761],
-            [815, 538],
-            [1791, 368],
-            [1847, 635]
+            [15, 1220],
+            [15, 1054],
+            [1519, 939],
+            [1519, 1203]
         ])
 
 zone4 = np.array([
-            [8, 1098],
-            [8, 925],
-            [1850, 635],
-            [1895, 907],
-            [858, 1048]
+            [15, 1398],
+            [15, 1222],
+            [1519, 1210],
+            [1519, 1498]
         ])
 
 zone5 = np.array([
-            [8, 1258],
-            [8, 1098],
-            [834, 1050],
-            [1897, 902],
-            [1923, 1174],
-            [836, 1296]
+            [15, 1572],
+            [15, 1396],
+            [1519, 1500],
+            [1519, 1785]
         ])
 
 zone6 = np.array([
-            [8, 1400],
-            [8, 1258],
-            [852, 1294],
-            [1922, 1178],
-            [1945, 1422],
-            [1001, 1516]
+            [15, 1767],
+            [15, 1577],
+            [1519, 1791],
+            [1519, 2094]
         ])
 
 # Определяем центр зоны
@@ -166,7 +216,6 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
     tracker = Tracker(max_missed=max_missed, distance_threshold=distance_threshold)
     counting = set()
     counting_all = set()
-    counting_control = set()
 
     counting_zone1 = set()
     counting_zone2 = set()
@@ -180,8 +229,8 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # width = 2688
-    # height = 1520
+    width = 1520
+    height = 2688
     fpsv = int(cap.get(cv2.CAP_PROP_FPS))
 
     # Инициализация FFmpeg
@@ -206,9 +255,7 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
     if ffmpeg_cmd:
         print("Инициализация ffmpeg_cmd прошла успешно")
 
-    log_file_path = os.path.join(logs_path, "ffmpeg_debug.log")
-
-    with open(log_file_path, "wb") as error_log:
+    with open("ffmpeg_debug.log", "wb") as error_log:
         process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=error_log)
 
     fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
@@ -244,7 +291,6 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
         zone_5 = sv.PolygonZone(polygon=zone5, frame_resolution_wh=video_info.resolution_wh)
         zone_6 = sv.PolygonZone(polygon=zone6, frame_resolution_wh=video_info.resolution_wh)
         polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=video_info.resolution_wh)
-        polygon_zone_control = sv.PolygonZone(polygon=polygon1, frame_resolution_wh=video_info.resolution_wh)
 
         # Детекция
         results = model(frame)[0]
@@ -330,10 +376,7 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
 
             if cv2.pointPolygonTest(polygon, (cx, cy), False) >= 0:
                 counting_all.add(obj_id)
-                # print(f"counting_all: {counting_all}")
-
-            if cv2.pointPolygonTest(polygon1, (cx, cy), False) >= 0:
-                counting_control.add(obj_id)
+                print(f"counting_all: {counting_all}")
 
             # Отрисовка рамки
             if inside_zone:
@@ -387,8 +430,7 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
 
         detections = detections_all[detections_all.class_id != 0]
 
-        cv2.putText(frame, str(len(counting_all)), (35, 170), cv2.FONT_HERSHEY_COMPLEX, (4), (255, 255, 255), 5)
-        cv2.putText(frame, str(len(counting_control)), (35, 300), cv2.FONT_HERSHEY_COMPLEX, (4), (0, 0, 255), 5)
+        cv2.putText(frame, str(len(counting_all)), (35, 140), cv2.FONT_HERSHEY_COMPLEX, (4), (255, 255, 255), 5)
 
         for zone_X in zones:
             cv2.polylines(frame, [zone_X], True, (0, 255, 0), 3)
@@ -424,9 +466,6 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
         zone_annotator = sv.PolygonZoneAnnotator(zone=polygon_zone, color=sv.Color.BLUE, thickness=2, text_thickness=2,
                                                  text_scale=1)
         frame = zone_annotator.annotate(scene=frame)
-        zone_annotator_control = sv.PolygonZoneAnnotator(zone=polygon_zone_control, color=sv.Color.RED, thickness=2, text_thickness=2,
-                                                 text_scale=1)
-        frame = zone_annotator_control.annotate(scene=frame)
 
         # Отправка кадра в FFmpeg для трансляции
         if process and process.stdin:
@@ -439,15 +478,14 @@ def topcamera(rtsp_url, SAVE_FOLDER, FRAMES_FOLDER, api_key):
             print("Дефектных яиц не обнаружено.")
 
         print("Всего яиц:", len(counting_all))
-        print("Всего яиц, контрольная зона:", len(counting_control))
         print(f"Номер кадра: {frame_idx}")
         frame_idx += 1
 
-        frame_resized = cv2.resize(frame, (1920, 1080))
-        # frame_resized = cv2.resize(frame, (1280, 720))
-        # frame_resized = cv2.resize(frame, (2688, 1520))
-        # cv2.imshow("eggs", frame_resized)
-        # cv2.setMouseCallback('eggs', RGB)
+        # frame_resized = cv2.resize(frame, (1920, 1080))
+        frame_resized = cv2.resize(frame, (720, 1280))
+        # frame_resized = cv2.resize(frame, (1520, 2688))
+        cv2.imshow("eggs", frame_resized)
+        cv2.setMouseCallback('eggs', RGB)
 
         elapsed_time = time.time() - default_time
         delay = max(0, frame_time - elapsed_time)

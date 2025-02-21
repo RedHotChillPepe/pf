@@ -1,4 +1,6 @@
 # игнорировать директории .git и .cache
 .git
 .cache
-__pycache__/
+/__pycache__
+/Lib
+/Scripts
